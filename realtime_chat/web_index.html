@@ -246,12 +246,10 @@ function render() {
     fill($("voice"), opts.voices[cfg.tts] || [cfg.voice], cfg.voice);
     $("stt_gpu").disabled = !opts.stt_gpu;
     const j = opts.jan || {};
-    if (j.models_max != null) $("models_max").value = String(j.models_max);
+    // don't overwrite a choice the user hasn't applied yet
+    if (j.models_max != null && !maxDirty) $("models_max").value = String(j.models_max);
     $("restart").disabled = !j.restartable;
-    $("jan_hint").className = "hint" + (j.models_max === 0 ? " warn" : "");
-    $("jan_hint").textContent = !j.online ? "Jan's API isn't reachable. Start Jan, or restart it here."
-      : j.models_max === 0 ? "Unlimited keeps every model you switch to in VRAM, which slows everything down. Pick 1–2 and restart."
-      : "Applied when Jan restarts. Restarting also frees VRAM from old models.";
+    janHint();
     for (const [id, d] of Object.entries(opts.downloads || {})) showDownload(id, d.done, d.total);
   }
   $("stt_gpu").checked = !!cfg.stt_gpu;
@@ -288,7 +286,19 @@ function showDownload(id, done, total) {
 $("pause").onclick = () => { paused = !paused; $("pause").textContent = paused ? "Resume mic" : "Pause mic"; send({ type: "pause", paused }); };
 $("stop").onclick = () => send({ type: "stop" });
 $("reset").onclick = () => send({ type: "reset" });
-$("restart").onclick = () => send({ type: "restart_jan", models_max: Number($("models_max").value) });
+$("restart").onclick = () => { maxDirty = false; send({ type: "restart_jan", models_max: Number($("models_max").value) }); };
+let maxDirty = false;
+$("models_max").onchange = () => { maxDirty = true; janHint(); };
+function janHint() {
+  const j = opts?.jan || {}, picked = Number($("models_max").value), el = $("jan_hint");
+  const unlimited = picked === 0, pending = j.models_max != null && picked !== j.models_max;
+  el.className = "hint" + (unlimited ? " warn" : "");
+  el.textContent = !j.online ? "Jan's API isn't reachable. Start Jan, or restart it here."
+    : unlimited ? "Unlimited keeps every model you switch to in VRAM, which slows everything down. Pick 1–2 and restart."
+    : pending ? "Press Restart Jan to apply."
+    : "";
+  el.style.display = el.textContent ? "" : "none";
+}
 
 // ------------------------------------------------------------- visualizer
 const cv = $("viz"), cx = cv.getContext("2d");
