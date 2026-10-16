@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+models/
+*.wav
+*.webm
+bench/samples/
+bench/*.log
+bench/*.err

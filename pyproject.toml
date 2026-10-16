@@ -1,0 +1,42 @@
+[project]
+name = "realtime-ai-chat"
+version = "0.1.0"
+description = "Real-time local speech-to-speech chat: Silero VAD + Parakeet (ONNX) -> local LLM -> Orpheus TTS"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "numpy>=1.26",
+    "sounddevice>=0.4.6",
+    "requests>=2.31",
+    "onnx-asr[hub]>=0.12",
+    # DirectML runs SNAC (and optionally Parakeet) on any Windows GPU, no CUDA needed;
+    # it includes the CPU provider too.
+    "onnxruntime-directml>=1.20; sys_platform == 'win32'",
+    "onnxruntime>=1.20; sys_platform != 'win32'",
+    # Kokoro-82M TTS (fast, CPU-friendly alternative to Orpheus)
+    "kokoro-onnx>=0.4",
+    # speech server for Open WebUI
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "websockets>=12",  # web UI
+    "python-multipart>=0.0.9",
+    "av>=12",
+]
+
+[project.scripts]
+realtime-chat = "realtime_chat.main:main"
+realtime-chat-server = "realtime_chat.server:main"
+realtime-chat-web = "realtime_chat.web:main"
+realtime-chat-setup = "realtime_chat.setup_cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["realtime_chat"]
+
+[tool.uv]
+# kokoro-onnx and onnx-asr want stock onnxruntime, which would clobber the DirectML build
+# (same `onnxruntime` module). Keep it off Windows; onnxruntime-directml provides it there.
+override-dependencies = ["onnxruntime>=1.20; sys_platform != 'win32'"]
