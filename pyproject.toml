@@ -9,10 +9,10 @@ dependencies = [
     "sounddevice>=0.4.6",
     "requests>=2.31",
     "onnx-asr[hub]>=0.12",
-    # DirectML runs SNAC (and optionally Parakeet) on any Windows GPU, no CUDA needed;
-    # it includes the CPU provider too.
-    "onnxruntime-directml>=1.20; sys_platform == 'win32'",
-    "onnxruntime>=1.20; sys_platform != 'win32'",
+    # CUDA build with its CUDA/cuDNN runtime as pip packages (no toolkit install needed).
+    # Kokoro on CUDA is ~3x faster than CPU; it also runs SNAC and, optionally, Parakeet.
+    "onnxruntime-gpu[cuda,cudnn]>=1.24; sys_platform != 'darwin'",
+    "onnxruntime>=1.20; sys_platform == 'darwin'",
     # Kokoro-82M TTS (fast, CPU-friendly alternative to Orpheus)
     "kokoro-onnx>=0.4",
     # speech server for Open WebUI
@@ -37,6 +37,8 @@ build-backend = "hatchling.build"
 packages = ["realtime_chat"]
 
 [tool.uv]
-# kokoro-onnx and onnx-asr want stock onnxruntime, which would clobber the DirectML build
-# (same `onnxruntime` module). Keep it off Windows; onnxruntime-directml provides it there.
-override-dependencies = ["onnxruntime>=1.20; sys_platform != 'win32'"]
+# kokoro-onnx and onnx-asr want stock onnxruntime, which would clobber the GPU build
+# (same `onnxruntime` module). Only allow it on macOS, where there is no GPU build.
+override-dependencies = ["onnxruntime>=1.20; sys_platform == 'darwin'"]
+# NVIDIA sometimes publishes Linux wheels first; only pick versions that also exist for Windows
+required-environments = ["sys_platform == 'win32' and platform_machine == 'AMD64'"]

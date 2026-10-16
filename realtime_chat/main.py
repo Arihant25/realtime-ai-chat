@@ -12,6 +12,7 @@ import threading
 import time
 from pathlib import Path
 
+import onnxruntime as ort
 import requests
 import sounddevice as sd
 
@@ -293,6 +294,8 @@ def parse_args() -> argparse.Namespace:
                    help=f"kokoro: {', '.join(KOKORO_VOICES)} (default af_heart); "
                         f"orpheus: {', '.join(ORPHEUS_VOICES)} (default tara)")
     p.add_argument("--speed", type=float, default=1.0, help="speaking rate (kokoro)")
+    p.add_argument("--tts-cpu", action="store_true",
+                   help="run Kokoro on the CPU even when CUDA is available")
     p.add_argument("--system-prompt", default=None)
     p.add_argument("--barge-in", action="store_true",
                    help="let your voice interrupt the assistant (use headphones, or it hears itself)")
@@ -338,7 +341,9 @@ def main() -> None:
         tts = OrpheusTTS(args.base_url, args.tts_model, voice=args.voice or "tara",
                          api_key=args.api_key)
     else:
-        tts = KokoroTTS(MODELS_DIR, voice=args.voice or "af_heart", speed=args.speed)
+        cuda = "CUDAExecutionProvider" in ort.get_available_providers()
+        tts = KokoroTTS(MODELS_DIR, voice=args.voice or "af_heart", speed=args.speed,
+                        gpu=cuda and not args.tts_cpu)
     if not args.no_warmup:
         warm_up(llm, tts, args.tts.capitalize())
 

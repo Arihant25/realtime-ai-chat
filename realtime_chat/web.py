@@ -52,7 +52,8 @@ class Engine:
         self.cfg = {
             "stt": "nemo-parakeet-tdt-0.6b-v2", "stt_gpu": False,
             "llm": args.llm_model,
-            "tts": "kokoro", "voice": "af_heart", "speed": 1.0,
+            "tts": "kokoro-gpu" if "CUDAExecutionProvider" in ort.get_available_providers() else "kokoro",
+            "voice": "af_heart", "speed": 1.0,
             "barge_in": False, "silence_ms": 600, "early_ms": 250,
         }
         self.lock = threading.RLock()

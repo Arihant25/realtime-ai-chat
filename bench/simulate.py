@@ -121,7 +121,7 @@ def main():
     p.add_argument("--speech-dir", type=Path, required=True)
     p.add_argument("--base-url", default="http://127.0.0.1:1337/v1")
     p.add_argument("--llm-model", default="Qwen3_5-4B-IQ4_XS")
-    p.add_argument("--tts", default="kokoro", choices=["kokoro", "orpheus"])
+    p.add_argument("--tts", default="kokoro", choices=["kokoro", "kokoro-gpu", "orpheus"])
     p.add_argument("--tts-model", default="Orpheus-3b-FT-Q4_K_M")
     p.add_argument("--early-ms", type=int, default=250)
     p.add_argument("--silence-ms", type=int, default=600)
@@ -136,8 +136,8 @@ def main():
                                    min_silence_ms=args.silence_ms, early_silence_ms=args.early_ms)
     player = VirtualPlayer(args.prebuffer)
     llm = LLMClient(args.base_url, args.llm_model)
-    if args.tts == "kokoro":
-        tts = KokoroTTS(MODELS_DIR)
+    if args.tts.startswith("kokoro"):
+        tts = KokoroTTS(MODELS_DIR, gpu=args.tts == "kokoro-gpu")
     else:
         tts = OrpheusTTS(args.base_url, args.tts_model)
     convo = Conversation(llm, tts, player, system_prompt(sound_tags=args.tts == "orpheus"),

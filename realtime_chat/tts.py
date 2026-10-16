@@ -39,7 +39,10 @@ class SnacDecoder:
         opts.intra_op_num_threads = 1
         opts.inter_op_num_threads = 1
         providers = ["CPUExecutionProvider"]
-        if gpu and "DmlExecutionProvider" in ort.get_available_providers():
+        available = ort.get_available_providers()
+        if gpu and "CUDAExecutionProvider" in available:
+            providers.insert(0, ("CUDAExecutionProvider", {"cudnn_conv_algo_search": "HEURISTIC"}))
+        elif gpu and "DmlExecutionProvider" in available:
             providers.insert(0, "DmlExecutionProvider")
             opts.enable_mem_pattern = False  # required by DirectML
             opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL

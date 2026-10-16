@@ -7,10 +7,10 @@ Talk to a local LLM and hear it talk back, in real time. Everything runs on your
 | Voice activity detection | [Silero VAD](https://github.com/snakers4/silero-vad) (ONNX) | CPU |
 | Speech → text | [NVIDIA Parakeet TDT 0.6B v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) via its [ONNX port](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx) (no NeMo) | CPU (int8) |
 | Thinking | Any chat model in [Jan](https://jan.ai). Default: `Qwen3_5-4B-IQ4_XS` | GPU (Jan / llama.cpp) |
-| Text → speech (default) | [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) via [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) | CPU |
+| Text → speech (default) | [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) via [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) | GPU (CUDA), or CPU |
 | Text → speech (`--tts orpheus`) | [Orpheus 3B](https://huggingface.co/lex-au/Orpheus-3b-FT-Q4_K_M.gguf) Q4_K_M + [SNAC](https://huggingface.co/onnx-community/snac_24khz-ONNX) decoder (ONNX) | GPU (Jan) + GPU (SNAC, DirectML) |
 
-No PyTorch, NeMo or CUDA toolkit needed. Outside Jan, everything is ONNX Runtime (DirectML on Windows), about 100 MB of Python dependencies.
+No PyTorch, NeMo or CUDA toolkit needed. Outside Jan, everything is ONNX Runtime; its CUDA and cuDNN libraries come as pip packages (~1.3 GB).
 
 There are three ways to use it:
 - **`realtime-chat-web`**: the same voice chat with a browser UI at http://127.0.0.1:8890. It shows when it's listening, hearing you, thinking or speaking, gives live captions of your speech, reveals the reply word by word in sync with the audio, and lets you pick the model for each stage (STT, LLM, TTS, voice) while it runs.
@@ -131,7 +131,7 @@ powershell -ExecutionPolicy Bypass -File setup.ps1
 
 It does the following, skipping anything that's already done:
 
-1. Installs [uv](https://docs.astral.sh/uv/) and the Python dependencies (Python 3.11, ~100 MB, no PyTorch).
+1. Installs [uv](https://docs.astral.sh/uv/) and the Python dependencies (Python 3.11, ~1.5 GB with the CUDA runtime, no PyTorch).
 2. Installs [Jan](https://jan.ai) with winget, turns on its API server at launch, and sets "max loaded models" to 2.
 3. Downloads Qwen 3.5 4B into Jan (2.5 GB, SHA-256 checked). Add `--orpheus` and/or `--gemma` for those models too.
 4. Downloads Parakeet (~650 MB), Silero VAD (2 MB) and Kokoro-82M (340 MB).
@@ -203,17 +203,16 @@ RTX 2070 Max-Q (8 GB), i7-9750H, Jan (llama.cpp b9967). Reproduce with `bench/be
 
 **Recommended setup: Qwen 3.5 4B + Kokoro-82M (default).** Kokoro runs on the CPU, so the GPU is left entirely to the LLM. Orpheus sounds more expressive (`<laugh>`, `<sigh>`), but on an 8 GB GPU it has to share with the LLM and can't keep up.
 
-| Voice-to-voice (median, simulated) | Kokoro (CPU) | Orpheus (GPU) |
-|---|---|---|
-| **Qwen 3.5 4B** | **2.4 s** (1.7–2.4 s warm), 0.4 stalls/reply | 6.2 s, 5.0 stalls |
-| Gemma E2B IQ3_M | 2.4 s, 0.2 stalls (sometimes stops after its opener) | 4.5 s, 0.8 stalls |
+| Voice-to-voice (median, simulated) | **Kokoro (CUDA)** | Kokoro (CPU) | Orpheus (GPU) |
+|---|---|---|---|
+| **Qwen 3.5 4B** | **1.45–1.97 s** warm, 0.2 stalls/reply, 4.1 GB VRAM | 1.7–2.4 s | 6.2 s, 5.0 stalls |
+| Gemma E2B IQ3_M | | 2.4 s (sometimes stops after its opener) | 4.5 s |
 
-| Kokoro-82M (fp32 ONNX, i7-9750H) | Result |
-|---|---|
-| Opening clause (25 chars, 1.6 s audio) | ~0.95 s |
-| Full sentence (83 chars, 4.7 s audio) | 2.2 s = **2.1×** real time |
-| CPU threads 4 → 12 | 1.7× → 2.1× (little gain past 6) |
-| DirectML | not supported (ConvTranspose fails in this export) |
+| Kokoro-82M (fp32 ONNX) | CPU (i7-9750H) | CUDA (RTX 2070 Max-Q) |
+|---|---|---|
+| Opening clause (~25 chars) | ~950 ms | **~330 ms** |
+| Full sentence | 2.1× real time | **9.3×** real time |
+| Notes | 4 → 12 threads: 1.7× → 2.1× | needs `cudnn_conv_algo_search=HEURISTIC`; the default exhaustive search re-tunes for every input length (spikes to 2.7 s). DirectML fails on a ConvTranspose |
 
 Orpheus details (with `--tts orpheus`):
 

@@ -43,7 +43,9 @@ class KokoroTTS:
             # CUDA works; DirectML can't run this export (ConvTranspose in the F0 predictor fails)
             if "CUDAExecutionProvider" not in ort.get_available_providers():
                 raise RuntimeError("Kokoro on GPU needs the CUDA build of onnxruntime")
-            providers.insert(0, "CUDAExecutionProvider")
+            # HEURISTIC: Kokoro's input length changes every call, and the default
+            # exhaustive cuDNN search re-tunes per shape (measured 520 ms -> 2.7 s spikes)
+            providers.insert(0, ("CUDAExecutionProvider", {"cudnn_conv_algo_search": "HEURISTIC"}))
         session = ort.InferenceSession(ensure_file(models_dir, model_file), sess_options=opts,
                                        providers=providers)
         self.kokoro = Kokoro.from_session(session, ensure_file(models_dir, "voices-v1.0.bin"))
