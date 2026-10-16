@@ -38,6 +38,18 @@
   .state .word { font: 300 15px/1 var(--sans); letter-spacing: .3em; text-transform: uppercase; padding-left: .3em; white-space: nowrap; }
   .state .sub { margin-top: 10px; min-height: 12px; }
 
+  .controls { display: flex; justify-content: center; gap: 28px; padding: 4px 0 18px; }
+  .ctl { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0; border: 0; background: none; }
+  .ctl:hover { background: none; color: var(--text); }
+  .ctl svg { width: 46px; height: 46px; padding: 12px; border: 1px solid var(--line2); border-radius: 50%;
+             fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; transition: .15s; }
+  .ctl:hover svg { background: var(--text); color: #000; border-color: var(--text); }
+  .ctl:hover .cap { color: var(--text); }
+  .ctl:focus-visible svg { outline: 2px solid var(--user); outline-offset: 3px; }
+  #stop svg rect { fill: currentColor; stroke: none; }
+  .ctl .i-off, .ctl.off .i-on { display: none; }
+  .ctl.off .i-off { display: block; }
+  .ctl.off svg { border-color: var(--thinking); color: var(--thinking); }
   .log { flex: 1; overflow-y: auto; padding: 8px 48px 40px; display: flex; flex-direction: column; gap: 22px;
          mask-image: linear-gradient(to bottom, transparent 0, #000 28px); }
   .turn { display: grid; grid-template-columns: 52px 1fr; gap: 14px; max-width: 760px; width: 100%; margin: 0 auto; }
@@ -130,6 +142,21 @@
       <canvas id="viz" width="520" height="520"></canvas>
       <div class="state"><div class="word" id="word">Standby</div><div class="sub cap" id="sub"></div></div>
     </div>
+    <div class="controls">
+      <button class="ctl" id="pause" aria-label="Pause mic (M)" title="Pause mic · M">
+        <svg viewBox="0 0 24 24" class="i-on"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        <svg viewBox="0 0 24 24" class="i-off"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M3 3l18 18"/></svg>
+        <span class="cap" id="pause_t">Pause mic</span>
+      </button>
+      <button class="ctl" id="stop" aria-label="Stop talking (Esc)" title="Stop talking · Esc">
+        <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        <span class="cap">Stop talking</span>
+      </button>
+      <button class="ctl" id="reset" aria-label="New conversation (N)" title="New conversation · N">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        <span class="cap">New chat</span>
+      </button>
+    </div>
     <div class="log" id="log"><div class="empty cap" id="empty">Start talking</div></div>
   </section>
 
@@ -169,14 +196,6 @@
       <div class="btns" style="margin-top:12px"><button class="wide" id="restart">Restart Jan · free VRAM</button></div>
     </div>
 
-    <div class="sec">
-      <h2 class="cap"><span class="n">06</span>Session</h2>
-      <div class="btns">
-        <button id="pause">Pause mic</button>
-        <button id="stop">Stop talking</button>
-        <button id="reset" class="wide">New conversation</button>
-      </div>
-    </div>
   </aside>
 </main>
 <div class="toast" id="toast"></div>
@@ -283,7 +302,19 @@ function showDownload(id, done, total) {
   bar.firstElementChild.style.width = total ? `${(100 * done / total).toFixed(1)}%` : "0";
   t.textContent = total ? `Downloading ${(100 * done / total).toFixed(0)}% · ${fmtBytes(done)} / ${fmtBytes(total)}` : "";
 }
-$("pause").onclick = () => { paused = !paused; $("pause").textContent = paused ? "Resume mic" : "Pause mic"; send({ type: "pause", paused }); };
+function showPaused(p) {
+  paused = p;
+  const label = p ? "Resume mic" : "Pause mic";
+  $("pause").classList.toggle("off", p); $("pause_t").textContent = label;
+  $("pause").setAttribute("aria-label", `${label} (M)`); $("pause").title = `${label} · M`;
+}
+$("pause").onclick = () => { showPaused(!paused); send({ type: "pause", paused }); };
+document.addEventListener("keydown", e => {
+  if (e.target.closest("select, input") || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "m" || e.key === "M") $("pause").click();
+  else if (e.key === "Escape") $("stop").click();
+  else if (e.key === "n" || e.key === "N") $("reset").click();
+});
 $("stop").onclick = () => send({ type: "stop" });
 $("reset").onclick = () => send({ type: "reset" });
 $("restart").onclick = () => { maxDirty = false; send({ type: "restart_jan", models_max: Number($("models_max").value) }); };
@@ -343,8 +374,9 @@ function onSentence(m) {
   sentences.set(m.id, spans); scroll();
 }
 const H = {
+  paused(m) { showPaused(m.paused); },
   hello(m) {
-    cfg = m.config; opts = m.options; render();
+    cfg = m.config; opts = m.options; render(); showPaused(!!m.paused);
     $("log").innerHTML = m.history.length ? "" : '<div class="empty cap" id="empty">Start talking</div>';
     for (const h of m.history) addTurn(h.role === "user" ? "user" : "ai", h.text);
     H.metrics(m.metrics || {});

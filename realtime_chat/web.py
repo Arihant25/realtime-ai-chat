@@ -328,6 +328,7 @@ class Engine:
             self.paused = bool(msg.get("paused"))
             if self.paused and self.convo:
                 self.convo.interrupt()
+            self.broadcast({"type": "paused", "paused": self.paused})  # keep every open page in sync
         elif kind == "stop" and self.convo:
             self.convo.interrupt()
             self.broadcast({"type": "interrupted"})
@@ -373,7 +374,7 @@ def create_app(engine: Engine) -> FastAPI:
                    for m in (engine.convo.history[1:] if engine.convo else [])]
         await sock.send_json({"type": "hello", "config": engine.cfg, "history": history,
                               "options": engine.options() if engine.convo else None,
-                              "metrics": engine.metrics})
+                              "metrics": engine.metrics, "paused": engine.paused})
 
         async def sender():
             while True:
