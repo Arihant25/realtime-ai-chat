@@ -125,7 +125,7 @@ class Conversation:
                 # Orpheus can run below real time, so hold back just enough of this
                 # sentence that the rest arrives before playback catches up.
                 expected_s = len(sentence) / self._chars_per_s
-                need = int(max(0.0, expected_s * (1 - self._rtf) * 1.15) * TTS_RATE)
+                need = int(max(0.0, expected_s * (1 - self._rtf) * 1.4) * TTS_RATE)  # 1.4: estimates run short
                 held, got, done = [], 0, False
                 while got < need:
                     chunk = out.get()
@@ -285,8 +285,8 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--base-url", default="http://127.0.0.1:1337/v1", help="Jan / OpenAI-compatible API")
     p.add_argument("--api-key", default="", help="API key, if set in Jan's Local API Server")
-    p.add_argument("--llm-model", default="Qwen3_5-4B-IQ4_XS")
-    p.add_argument("--tts", default="kokoro", choices=["kokoro", "orpheus"],
+    p.add_argument("--llm-model", default="Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-IQ3_M")
+    p.add_argument("--tts", default="orpheus", choices=["kokoro", "orpheus"],
                    help="kokoro: Kokoro-82M, fast, on the CPU; orpheus: more expressive, "
                         "slower, needs the GPU (via Jan)")
     p.add_argument("--tts-model", default="Orpheus-3b-FT-Q4_K_M", help="Jan model ID (orpheus)")

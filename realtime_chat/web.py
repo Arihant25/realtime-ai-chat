@@ -36,6 +36,9 @@ from realtime_chat.vad import SileroVAD, UtteranceSegmenter, ensure_silero
 INDEX = Path(__file__).with_name("web_index.html")
 GPU_PROVIDERS = {"CUDAExecutionProvider", "DmlExecutionProvider"}
 TTS_KEYS = ("tts", "voice", "speed")
+ORPHEUS_ID = "Orpheus-3b-FT-Q4_K_M"
+PAGES_ORIGIN = "https://arihant25.github.io"  # the hosted copy of the UI connects to localhost
+DEFAULT_LLM = "Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-IQ3_M"
 
 
 def _quiet(msg: str) -> None:
@@ -49,11 +52,15 @@ class Engine:
     def __init__(self, args: argparse.Namespace):
         self.args = args
         self.base_url = args.base_url
+        self.allowed_origins = {f"http://{h}:{args.port}" for h in (args.host, "127.0.0.1", "localhost")}
+        self.allowed_origins |= {PAGES_ORIGIN, *args.allow_origin}
         self.cfg = {
             "stt": "nemo-parakeet-tdt-0.6b-v2", "stt_gpu": False,
             "llm": args.llm_model,
-            "tts": "kokoro-gpu" if "CUDAExecutionProvider" in ort.get_available_providers() else "kokoro",
-            "voice": "af_heart", "speed": 1.0,
+            # Orpheus (expressive) when it's installed in Jan, else Kokoro (GPU if CUDA works)
+            "tts": "orpheus" if jan.installed(ORPHEUS_ID) else
+                   "kokoro-gpu" if "CUDAExecutionProvider" in ort.get_available_providers() else "kokoro",
+            "voice": "tara" if jan.installed(ORPHEUS_ID) else "af_heart", "speed": 1.0,
             "barge_in": False, "silence_ms": 600, "early_ms": 250,
         }
         self.lock = threading.RLock()
@@ -353,6 +360,12 @@ def create_app(engine: Engine) -> FastAPI:
 
     @app.websocket("/ws")
     async def ws(sock: WebSocket):
+        # Browsers let any website open a WebSocket to localhost, and this socket can read
+        # your conversation and control the mic. Only accept our own pages.
+        origin = sock.headers.get("origin")
+        if origin is not None and origin not in engine.allowed_origins:
+            await sock.close(code=1008)
+            return
         await sock.accept()
         q: asyncio.Queue = asyncio.Queue()
         engine.clients.add(q)
@@ -384,11 +397,13 @@ def main() -> None:
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8890)
     p.add_argument("--base-url", default="http://127.0.0.1:1337/v1")
-    p.add_argument("--llm-model", default="Qwen3_5-4B-IQ4_XS")
+    p.add_argument("--llm-model", default=DEFAULT_LLM)
     p.add_argument("--tts-model", default="Orpheus-3b-FT-Q4_K_M")
     p.add_argument("--input-device", default=None)
     p.add_argument("--output-device", default=None)
     p.add_argument("--no-browser", action="store_true")
+    p.add_argument("--allow-origin", action="append", default=[],
+                   help="extra web origin allowed to connect, e.g. a fork's GitHub Pages URL")
     args = p.parse_args()
     for attr in ("input_device", "output_device"):
         v = getattr(args, attr)

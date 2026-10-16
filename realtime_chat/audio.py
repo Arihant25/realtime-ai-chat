@@ -33,6 +33,10 @@ class Microphone:
         self.stream.close()
 
 
+FADE = 120  # 5 ms at 24 kHz
+_RAMP = np.linspace(0.0, 1.0, FADE, dtype=np.float32)
+
+
 class Player:
     """Plays queued float32 chunks back to back.
 
@@ -41,8 +45,11 @@ class Player:
     instead of crackling through underruns.
     """
 
-    def __init__(self, sample_rate: int, prebuffer_s: float = 0.3, device=None):
+    def __init__(self, sample_rate: int, prebuffer_s: float = 0.3, device=None,
+                 rebuffer_s: float = 0.4):
         self.prebuffer = int(prebuffer_s * sample_rate)
+        self.rebuffer = int(max(rebuffer_s, prebuffer_s) * sample_rate)
+        self._stalled = False
         self._chunks: collections.deque[np.ndarray] = collections.deque()
         self._offset = 0
         self._queued = 0
@@ -56,6 +63,8 @@ class Player:
         self.fed_total = 0
         self.played_total = 0
         self.level = 0.0  # RMS of the last output block
+        self.underflows = 0  # driver ran dry: Python callback missed its deadline (clicks)
+        self.stalls = 0  # our queue ran dry mid-reply: generation fell behind (gaps)
         self.stream = sd.OutputStream(
             samplerate=sample_rate, channels=1, dtype="float32", device=device,
             callback=self._callback, blocksize=1024,
@@ -82,6 +91,7 @@ class Player:
             self.fed_total = self.played_total  # dropped audio never plays
             self._holding = True
             self._finished = False
+            self._stalled = False
 
     def set_gate(self, gated: bool) -> None:
         """While gated, audio keeps queueing but nothing plays (speculative replies)."""
@@ -96,12 +106,18 @@ class Player:
         out = outdata[:, 0]
         out.fill(0)
         self.level = 0.0
+        if status.output_underflow:
+            self.underflows += 1
         with self._lock:
             if self._gated:
                 return
+            resumed = False
             if self._holding:
-                if self._queued >= self.prebuffer or (self._finished and self._queued):
+                # after a stall, wait for a bigger cushion so it doesn't stutter right away
+                need = self.rebuffer if self._stalled else self.prebuffer
+                if self._queued >= need or (self._finished and self._queued):
                     self._holding = False
+                    resumed = self._stalled
                 else:
                     return
             written = 0
@@ -115,12 +131,22 @@ class Player:
                 if self._offset >= len(chunk):
                     self._chunks.popleft()
                     self._offset = 0
+            if written and resumed:  # fade back in after a stall instead of a hard restart
+                n = min(FADE, written)
+                out[:n] *= _RAMP[:n]
+                self._stalled = False
+            if not self._chunks:
+                self._holding = True  # underrun or done: rebuffer before resuming
+                if written and not self._finished:
+                    # generation fell behind mid-reply: fade out rather than cut (a cut clicks)
+                    self.stalls += 1
+                    self._stalled = True
+                    n = min(FADE, written)
+                    out[written - n : written] *= _RAMP[:n][::-1]
             if written:
                 self.last_sound = time.monotonic()
                 self.played_total += written
                 self.level = float(np.sqrt(np.mean(out[:written] ** 2)))
-            if not self._chunks:
-                self._holding = True  # underrun or done: rebuffer before resuming
 
     def close(self) -> None:
         self.stream.stop()

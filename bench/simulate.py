@@ -42,6 +42,7 @@ class VirtualPlayer:
         self.played = 0
         self.fed_total = self.played_total = 0
         self.level = 0.0
+        self.stalled = False
         threading.Thread(target=self._run, daemon=True).start()
 
     def feed(self, chunk):
@@ -75,8 +76,10 @@ class VirtualPlayer:
                 if self.gated:
                     continue
                 if self.holding:
-                    if self.queued >= self.prebuffer or (self.finished and self.queued):
+                    need = int(0.4 * TTS_RATE) if self.stalled else self.prebuffer  # as audio.Player
+                    if self.queued >= max(need, self.prebuffer) or (self.finished and self.queued):
                         self.holding = False
+                        self.stalled = False
                     else:
                         continue
                 n = min(block, self.queued)
@@ -89,8 +92,9 @@ class VirtualPlayer:
                     self.first_sound = self.first_sound or self.last_sound
                 if self.queued == 0:
                     self.holding = True
-                    if not self.finished:
+                    if n and not self.finished:
                         self.stalls += 1
+                        self.stalled = True
 
 
 def run_turn(listener, player, convo, audio, gap_s=2.5, extra=None):

@@ -1,14 +1,16 @@
 # realtime-ai-chat
 
+**[Open the UI](https://arihant25.github.io/realtime-ai-chat/)** (it connects to the backend on your machine) · MIT licensed
+
 Talk to a local LLM and hear it talk back, in real time. Everything runs on your machine with no cloud APIs.
 
 | Stage | Model | Runs on |
 |---|---|---|
 | Voice activity detection | [Silero VAD](https://github.com/snakers4/silero-vad) (ONNX) | CPU |
 | Speech → text | [NVIDIA Parakeet TDT 0.6B v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) via its [ONNX port](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx) (no NeMo) | CPU (int8) |
-| Thinking | Any chat model in [Jan](https://jan.ai). Default: `Qwen3_5-4B-IQ4_XS` | GPU (Jan / llama.cpp) |
-| Text → speech (default) | [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) via [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) | GPU (CUDA), or CPU |
-| Text → speech (`--tts orpheus`) | [Orpheus 3B](https://huggingface.co/lex-au/Orpheus-3b-FT-Q4_K_M.gguf) Q4_K_M + [SNAC](https://huggingface.co/onnx-community/snac_24khz-ONNX) decoder (ONNX) | GPU (Jan) + GPU (SNAC, DirectML) |
+| Thinking | Any chat model in [Jan](https://jan.ai). Default: `Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-IQ3_M` | GPU (Jan / llama.cpp) |
+| Text → speech (default) | [Orpheus 3B](https://huggingface.co/lex-au/Orpheus-3b-FT-Q4_K_M.gguf) Q4_K_M + [SNAC](https://huggingface.co/onnx-community/snac_24khz-ONNX) decoder (ONNX). Expressive, with `<laugh>`/`<sigh>` | GPU (Jan) + GPU (SNAC, CUDA) |
+| Text → speech (`--tts kokoro`) | [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) via [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx). About 2.5× lower latency | GPU (CUDA), or CPU |
 
 No PyTorch, NeMo or CUDA toolkit needed. Outside Jan, everything is ONNX Runtime; its CUDA and cuDNN libraries come as pip packages (~1.3 GB).
 
@@ -133,7 +135,7 @@ It does the following, skipping anything that's already done:
 
 1. Installs [uv](https://docs.astral.sh/uv/) and the Python dependencies (Python 3.11, ~1.5 GB with the CUDA runtime, no PyTorch).
 2. Installs [Jan](https://jan.ai) with winget, turns on its API server at launch, and sets "max loaded models" to 2.
-3. Downloads Qwen 3.5 4B into Jan (2.5 GB, SHA-256 checked). Add `--orpheus` and/or `--gemma` for those models too.
+3. Downloads Gemma 4 E2B (3.1 GB) and Orpheus 3B (2.4 GB) into Jan, SHA-256 checked. `--qwen` adds Qwen 3.5 4B; `--no-orpheus` skips Orpheus and uses Kokoro.
 4. Downloads Parakeet (~650 MB), Silero VAD (2 MB) and Kokoro-82M (340 MB).
 5. Starts Jan and the web UI at **http://127.0.0.1:8890**.
 
@@ -170,7 +172,7 @@ Start a chat and press the call (headset) button. Open WebUI synthesizes each se
 
 ```powershell
 uv run realtime-chat-web                   # web UI on http://127.0.0.1:8890
-uv run realtime-chat                       # terminal version: Qwen + Kokoro (af_heart), half-duplex
+uv run realtime-chat                       # terminal version: Gemma + Orpheus (tara), half-duplex
 uv run realtime-chat --voice am_michael    # other Kokoro voice
 uv run realtime-chat --tts orpheus --voice leo   # expressive but slow on 8 GB GPUs
 uv run realtime-chat --barge-in            # interrupt by talking (wear headphones!)
@@ -181,8 +183,8 @@ uv run realtime-chat --list-devices        # then --input-device N / --output-de
 | Flag | Default | Meaning |
 |---|---|---|
 | `--base-url` | `http://127.0.0.1:1337/v1` | OpenAI-compatible server (Jan, LM Studio, llama-server) |
-| `--llm-model` | `Qwen3_5-4B-IQ4_XS` | Model ID of the chat model |
-| `--tts` | `kokoro` | `kokoro` (fast, CPU) or `orpheus` (expressive, GPU via Jan) |
+| `--llm-model` | Gemma 4 E2B IQ3_M | Model ID of the chat model |
+| `--tts` | `orpheus` | `orpheus` (expressive, GPU via Jan) or `kokoro` (fast, CUDA or CPU) |
 | `--tts-model` | `Orpheus-3b-FT-Q4_K_M` | Jan model ID of Orpheus |
 | `--voice` | `af_heart` / `tara` | Kokoro: af_heart, af_bella, af_nicole, af_sarah, af_sky, am_michael, am_fenrir, am_puck, bf_emma, bf_isabella, bm_george, bm_fable. Orpheus: tara, leah, jess, leo, dan, mia, zac, zoe |
 | `--speed` | `1.0` | Kokoro speaking rate |
@@ -201,7 +203,7 @@ uv run realtime-chat --list-devices        # then --input-device N / --output-de
 
 RTX 2070 Max-Q (8 GB), i7-9750H, Jan (llama.cpp b9967). Reproduce with `bench/bench.py`, `bench/parallel_tts.py` and `bench/simulate.py` (runs the real turn-taking loop on WAV files with a virtual speaker).
 
-**Recommended setup: Qwen 3.5 4B + Kokoro-82M (default).** Kokoro runs on the CPU, so the GPU is left entirely to the LLM. Orpheus sounds more expressive (`<laugh>`, `<sigh>`), but on an 8 GB GPU it has to share with the LLM and can't keep up.
+**Default: Gemma 4 E2B + Orpheus**, for the most expressive voice. **Fastest: Qwen 3.5 4B + Kokoro on CUDA** (about 1.5–2 s voice-to-voice). On an 8 GB GPU, Orpheus shares the GPU with the LLM and runs below real time. The player buffers each sentence to compensate and fades around any stall, but replies start later. Set Jan's max loaded models to 2 so nothing else competes for VRAM.
 
 | Voice-to-voice (median, simulated) | **Kokoro (CUDA)** | Kokoro (CPU) | Orpheus (GPU) |
 |---|---|---|---|
@@ -279,3 +281,7 @@ bench/
 - **It answers itself:** you're on speakers with `--barge-in`. Drop the flag or use headphones.
 - **It cuts you off mid-thought:** raise `--silence-ms` (e.g. 900).
 - **The LLM "thinks" out loud:** thinking is disabled through `chat_template_kwargs`, and any `<think>` blocks are stripped.
+
+## License
+
+[MIT](LICENSE) © 2026 Arihant Tripathy. The models have their own licenses: Parakeet (CC-BY-4.0), Kokoro (Apache-2.0), Orpheus (Apache-2.0), Gemma (Gemma Terms of Use), Qwen (Apache-2.0).

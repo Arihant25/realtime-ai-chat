@@ -1,5 +1,5 @@
 # One command: install everything, then open the web UI.
-#   powershell -ExecutionPolicy Bypass -File setup.ps1 [--orpheus] [--gemma]
+#   powershell -ExecutionPolicy Bypass -File setup.ps1 [--qwen] [--no-orpheus]
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 

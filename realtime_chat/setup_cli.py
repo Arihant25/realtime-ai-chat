@@ -34,8 +34,9 @@ def progress_printer(label: str):
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--orpheus", action="store_true", help="also install Orpheus 3B TTS into Jan")
-    p.add_argument("--gemma", action="store_true", help="also install Gemma 4 E2B into Jan")
+    p.add_argument("--qwen", action="store_true", help="also install Qwen 3.5 4B into Jan")
+    p.add_argument("--no-orpheus", action="store_true",
+                   help="skip Orpheus (2.4 GB); Kokoro is used for speech instead")
     args = p.parse_args()
 
     step("Jan")
@@ -64,8 +65,9 @@ def main() -> None:
             print("   Max loaded models: 2 (frees VRAM when switching)")
 
     step("Models for Jan")
-    wanted = ["Qwen3_5-4B-IQ4_XS"] + (["Orpheus-3b-FT-Q4_K_M"] if args.orpheus else []) \
-        + (["Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-IQ3_M"] if args.gemma else [])
+    wanted = ["Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-IQ3_M"] \
+        + ([] if args.no_orpheus else ["Orpheus-3b-FT-Q4_K_M"]) \
+        + (["Qwen3_5-4B-IQ4_XS"] if args.qwen else [])
     new_models = False
     for entry in (e for e in jan.CATALOG if e["id"] in wanted):
         if jan.installed(entry["id"]):

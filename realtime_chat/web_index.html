@@ -93,6 +93,13 @@
   .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #0a0a0a; border: 1px solid var(--error);
            color: var(--text); padding: 10px 16px; border-radius: 6px; font-size: 13px; max-width: min(560px, 92vw); display: none; z-index: 5; }
   .toast.info { border-color: var(--line2); }
+  .offline { position: fixed; inset: 0; background: rgba(0,0,0,.92); display: none; place-items: center; z-index: 10; padding: 16px; }
+  .offline .card { max-width: 560px; border: 1px solid var(--line2); border-radius: 10px; padding: 28px; background: #050505; }
+  .offline h1 { font: 300 26px/1.25 var(--sans); margin: 16px 0 10px; letter-spacing: -.01em; }
+  .offline p { color: var(--dim); margin: 0 0 14px; }
+  .offline pre { background: #000; border: 1px solid var(--line); border-radius: 6px; padding: 14px; overflow-x: auto;
+                 font: 12.5px/1.7 var(--mono); color: var(--text); margin: 0 0 14px; }
+  .offline a { color: var(--text); }
   ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-thumb { background: #1f1f1f; border-radius: 4px; }
 
   @media (max-width: 820px) {
@@ -173,6 +180,19 @@
   </aside>
 </main>
 <div class="toast" id="toast"></div>
+<div class="offline" id="offline">
+  <div class="card">
+    <div class="cap" style="color:var(--thinking)">Backend offline · <span id="backend_addr"></span></div>
+    <h1>Everything runs on your machine.</h1>
+    <p>This page is only the interface. Speech recognition, the language model and the voice all run locally, so
+       start the backend and this page connects to it automatically.</p>
+    <pre>git clone https://github.com/Arihant25/realtime-ai-chat
+cd realtime-ai-chat
+powershell -ExecutionPolicy Bypass -File setup.ps1</pre>
+    <p class="cap">Already set up? <span style="color:var(--text)">uv run realtime-chat-web</span></p>
+    <p><a href="https://github.com/Arihant25/realtime-ai-chat">github.com/Arihant25/realtime-ai-chat</a></p>
+  </div>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -351,11 +371,23 @@ const H = {
   error(m) { toast(m.text); },
   reset() { $("log").innerHTML = '<div class="empty cap" id="empty">New conversation</div>'; userTurn = aiTurn = null; },
 };
+// Served by the backend: talk to it. Opened from GitHub Pages (or as a file): talk to the
+// backend running on this machine. ?backend=host:port overrides both.
+const params = new URLSearchParams(location.search);
+const LOCAL = location.protocol === "http:" && !location.hostname.endsWith("github.io");
+const BACKEND = params.get("backend") || (LOCAL ? location.host : "127.0.0.1:8890");
+let everConnected = false, failures = 0;
 function connect() {
-  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws = new WebSocket(`ws://${BACKEND}/ws`);
+  ws.onopen = () => { everConnected = true; failures = 0; $("offline").style.display = "none"; };
   ws.onmessage = e => { const m = JSON.parse(e.data); H[m.type]?.(m); };
-  ws.onclose = () => { setState("loading", 0, 0); statusText = "Reconnecting…"; setTimeout(connect, 1500); };
+  ws.onclose = () => {
+    setState("loading", 0, 0); statusText = "Reconnecting…";
+    if (++failures >= 2 && !everConnected) $("offline").style.display = "grid";
+    setTimeout(connect, failures > 5 ? 4000 : 1500);
+  };
 }
+$("backend_addr").textContent = BACKEND;
 connect();
 </script>
 </body>
